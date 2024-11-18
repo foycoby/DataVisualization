@@ -1,6 +1,6 @@
 // Load the JSON file and initialize the dashboard
 d3.json("dashboard_data.json").then(data => {
-    createStackedBarChart(data.risk_contributions);
+    create2dDensityChart(data.scatter_data);
     createPieChart(data.risk_contributions);
     createScatterPlots(data.scatter_data);
     // Add additional visualizations as needed
@@ -10,9 +10,10 @@ d3.json("dashboard_data.json").then(data => {
 const tooltip = d3.select("#tooltip");
 
 // Stacked Bar Chart
-function createStackedBarChart(data) {
-    const svg = d3.select("#stacked-bar").append("svg")
-        .attr("width", 800).attr("height", 400);
+function create2dDensityChart(data) {
+    const svg = d3.select("#heatmap").append("svg")
+        .attr("width", 800)
+        .attr("height", 400);
 
     const margin = { top: 40, right: 40, bottom: 40, left: 60 };
     const width = svg.attr("width") - margin.left - margin.right;
@@ -21,31 +22,52 @@ function createStackedBarChart(data) {
     const chart = svg.append("g")
         .attr("transform", `translate(${margin.left}, ${margin.top})`);
 
-    const factors = Object.keys(data);
-    const values = Object.values(data);
+    // Scales
+    const xScale = d3.scaleLinear()
+        .domain(d3.extent(data, d => d.G3))
+        .range([0, width]);
 
-    const xScale = d3.scaleBand().domain(factors).range([0, width]).padding(0.3);
-    const yScale = d3.scaleLinear().domain([0, 1]).range([height, 0]);
+    const yScale = d3.scaleLinear()
+        .domain([0, Math.max(0.1, d3.max(data, d => d.Dalc_Normalized))]) // Include 0 and 0.1 in domain
+        .range([height, 0]);
 
-    chart.append("g").call(d3.axisLeft(yScale));
-    chart.append("g").attr("transform", `translate(0, ${height})`).call(d3.axisBottom(xScale));
+    // Axes
+    chart.append("g")
+        .attr("transform", `translate(0, ${height})`)
+        .call(d3.axisBottom(xScale).ticks(10))
+        .append("text")
+        .attr("x", width / 2)
+        .attr("y", 40)
+        .attr("fill", "black")
+        .text("Final Scores");
 
-    chart.selectAll(".bar")
-        .data(factors)
+    chart.append("g")
+        .call(d3.axisLeft(yScale)
+            .tickValues([0, 0.1, ...yScale.ticks(10)]) // Add 0 and 0.1 explicitly
+            )
+        .append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("x", -height / 2)
+        .attr("y", -40)
+        .attr("fill", "black")
+        .text("weekday Alcohol"); // Format ticks to 1 decimal place
+
+    // Contour Density
+    const contours = d3.contourDensity()
+        .x(d => xScale(d.G3))
+        .y(d => yScale(d.Dalc_Normalized))
+        .size([width, height])
+        .bandwidth(9)(data);
+
+    chart.selectAll("path")
+        .data(contours)
         .enter()
-        .append("rect")
-        .attr("x", d => xScale(d))
-        .attr("y", d => yScale(data[d]))
-        .attr("width", xScale.bandwidth())
-        .attr("height", d => height - yScale(data[d]))
-        .attr("fill", "steelblue")
-        .on("mouseover", function(e, d) {
-            tooltip.style("opacity", 1).text(`${d}: ${data[d]}`);
-        })
-        .on("mousemove", e => {
-            tooltip.style("left", (e.pageX + 5) + "px").style("top", (e.pageY - 28) + "px");
-        })
-        .on("mouseout", () => tooltip.style("opacity", 0));
+        .append("path")
+        .attr("d", d3.geoPath())
+        .attr("fill", "none")
+        .attr("stroke", "steelblue")
+        .attr("stroke-width", 1.5)
+        .attr("opacity", 0.7);
 }
 
 // Pie Chart
