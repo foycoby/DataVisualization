@@ -39,25 +39,24 @@ function create2dDensityChart(data) {
         .attr("x", width / 2)
         .attr("y", 40)
         .attr("fill", "black")
-        .text("Final Scores");
+        .text("G3");
 
     chart.append("g")
         .call(d3.axisLeft(yScale)
-            .tickValues([0, 0.1, ...yScale.ticks(10)]) // Add 0 and 0.1 explicitly
-            )
+            .tickValues([0, 0.1, ...yScale.ticks(10)])) // Add 0 and 0.1 explicitly
         .append("text")
         .attr("transform", "rotate(-90)")
         .attr("x", -height / 2)
         .attr("y", -40)
         .attr("fill", "black")
-        .text("weekday Alcohol"); // Format ticks to 1 decimal place
+        .text("Dalc");  
 
     // Contour Density
     const contours = d3.contourDensity()
         .x(d => xScale(d.G3))
         .y(d => yScale(d.Dalc_Normalized))
         .size([width, height])
-        .bandwidth(9)(data);
+        .bandwidth(13)(data);
 
     chart.selectAll("path")
         .data(contours)
@@ -68,8 +67,40 @@ function create2dDensityChart(data) {
         .attr("stroke", "steelblue")
         .attr("stroke-width", 1.5)
         .attr("opacity", 0.7);
-}
 
+        const groupedData = d3.rollup(
+            data,
+            v => v.length,
+            d => d.Dalc_Normalized.toFixed(2),
+            d => d.G3.toFixed(2)
+        );
+    
+        // Scatter Plot
+        chart.selectAll("circle")
+            .data(data)
+            .enter()
+            .append("circle")
+            .attr("cx", d => xScale(d.G3))
+            .attr("cy", d => yScale(d.Dalc_Normalized))
+            .attr("r", 2)
+            .attr("fill", "red")
+            .attr("opacity", 0.8)
+            .on("mouseover", function (e, d) {
+                const count = groupedData
+                    .get(d.Dalc_Normalized.toFixed(2))
+                    ?.get(d.G3.toFixed(2));
+    
+                d3.select("#tooltip")
+                    .style("opacity", 1)
+                    .text(`Count: ${count}`);
+            })
+            .on("mousemove", e => {
+                d3.select("#tooltip")
+                    .style("left", (e.pageX + 5) + "px")
+                    .style("top", (e.pageY - 28) + "px");
+            })
+            .on("mouseout", () => d3.select("#tooltip").style("opacity", 0));
+}
 // Pie Chart
 function createPieChart(data) {
     const svg = d3.select("#pie-chart").append("svg")
