@@ -162,7 +162,7 @@ function createScatterPlots(data) {
 
     const xScale = d3.scaleLinear().domain([0, 1]).range([0, width]);
     const yScale = d3.scaleLinear().domain([0, 1]).range([height, 0]);
-    const color = d3.scaleOrdinal(d3.schemeCategory10);
+    //const color = d3.scaleOrdinal(d3.schemeCategory10);
 
     chart.append("g").call(d3.axisLeft(yScale));
     chart.append("g").attr("transform", `translate(0, ${height})`).call(d3.axisBottom(xScale));
@@ -196,6 +196,10 @@ function createScatterPlots(data) {
     const performanceColorScale = d3.scaleOrdinal()
         .domain(['Low', 'Average', 'High'])
         .range([colorScale(1), colorScale(3), colorScale(5)]); // Use different shades of blue
+
+    const legend = chart.append("g")
+        .attr("class", "legend")
+        .attr("transform", `translate(${width - 100}, 20)`);
 
     // Add points for each group
     groupSelection.selectAll("circle")
@@ -264,6 +268,28 @@ function createScatterPlots(data) {
             chart.selectAll(`g.score-group[data-category="${category}"]`)
                 .attr("display", visible ? "block" : "none");
         });
+
+    // Add colored rectangles
+    legend.selectAll("rect")
+        .data(['High', 'Average', 'Low'])
+        .enter()
+        .append("rect")
+        .attr("x", 0)
+        .attr("y", (d, i) => i * 20)
+        .attr("width", 12)
+        .attr("height", 12)
+        .attr("fill", d => performanceColorScale(d));
+
+    // Add text labels
+    legend.selectAll("text")
+        .data(['High', 'Average', 'Low'])
+        .enter()
+        .append("text")
+        .attr("x", 20)
+        .attr("y", (d, i) => i * 20 + 10)
+        .text(d => d)
+        .attr("font-size", "12px")
+        .attr("alignment-baseline", "middle");
 }
 
 
