@@ -303,6 +303,35 @@ function createScatterPlots(data) {
         .attr("transform", "rotate(-90)")
         .attr("font-size", "12px")
         .text("Normalized Weekday Alc"); // Updated legend title
+        
+
+    // Add grid lines for x-axis
+    const xGridLines = d3.axisBottom(xScale)
+        .ticks(5)
+        .tickSize(-height)
+        .tickFormat(""); // No labels for grid lines
+
+    chart.append("g")
+        .attr("class", "grid")
+        .attr("transform", `translate(0, ${height})`)
+        .call(xGridLines)
+        .selectAll("line") // Select all lines in the grid
+        .attr("stroke", "lightgray") // Change stroke color to light gray
+        .attr("opacity", 0.5); // Adjust opacity
+
+    // Add grid lines for y-axis
+    const yGridLines = d3.axisLeft(yScale)
+        .ticks(5)
+        .tickSize(-width)
+        .tickFormat(""); // No labels for grid lines
+
+    chart.append("g")
+        .attr("class", "grid")
+        .call(yGridLines)
+        .selectAll("line") // Select all lines in the grid
+        .attr("stroke", "lightgray") // Change stroke color to light gray
+        .attr("opacity", 0.5); // Adjust opacity
+
 }
 
 
