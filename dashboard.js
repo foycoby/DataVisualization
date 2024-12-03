@@ -1,5 +1,5 @@
 // Define the global color scale at the top of your file
-const colorScale = d3.scaleSequential(d3.interpolateBlues)
+const colorScale = d3.scaleSequential(d3.interpolateViridis)
     .domain([0, 5]); // Adjusted domain to provide darker blues
 
 // Load the JSON file and initialize the dashboard
@@ -82,7 +82,7 @@ function create2dDensityChart(data) {
         .append("path")
         .attr("d", d3.geoPath())
         .attr("fill", "none")
-        .attr("stroke", colorScale(5)) // Use color scale
+        .attr("stroke", colorScale(2)) // Use color scale
         .attr("stroke-width", 1.5)
         .attr("opacity", 0.7);
 
@@ -101,7 +101,7 @@ function create2dDensityChart(data) {
             .attr("cx", d => xScale(d.G3))
             .attr("cy", d => yScale(d.Dalc_Normalized))
             .attr("r", 2)
-            .attr("fill", d => colorScale(d.Dalc_Normalized * 2)) // Use color scale
+            .attr("fill", d => colorScale(0.5 + d.Dalc_Normalized/2)) // Using blues with varying intensity
             .attr("opacity", 0.8)
             .on("mouseover", function (e, d) {
                 const count = groupedData
@@ -128,7 +128,7 @@ function createPieChart(data) {
 
     const radius = 200;
 
-    const color = d3.scaleOrdinal(d3.schemeCategory10);
+    //const color = d3.scaleOrdinal(d3.schemeCategory10);
     const pie = d3.pie().value(d => d[1]);
     const arc = d3.arc().innerRadius(0).outerRadius(radius);
 
@@ -139,7 +139,7 @@ function createPieChart(data) {
         .enter()
         .append("path")
         .attr("d", arc)
-        .attr("fill", (d, i) => colorScale(i * 2)) // Use color scale
+        .attr("fill", (d, i) => colorScale(i)) // Use color scale
         .on("mouseover", function(e, d) {
             tooltip.style("opacity", 1).text(`${d.data[0]}: ${d.data[1]}`);
         })
@@ -153,35 +153,69 @@ function createScatterPlots(data) {
     const svg = d3.select("#scatter-plots").append("svg")
         .attr("width", 800).attr("height", 500);
 
-    const margin = { top: 40, right: 40, bottom: 80, left: 80 };
+    const margin = { top: 40, right: 100, bottom: 80, left: 80 }; // Increased right margin
     const width = svg.attr("width") - margin.left - margin.right;
     const height = svg.attr("height") - margin.top - margin.bottom;
 
     const chart = svg.append("g")
         .attr("transform", `translate(${margin.left}, ${margin.top})`);
 
-    const xScale = d3.scaleLinear().domain([0, 1]).range([0, width]);
-    const yScale = d3.scaleLinear().domain([0, 1]).range([height, 0]);
-    //const color = d3.scaleOrdinal(d3.schemeCategory10);
+    // Calculate min/max values for scales, excluding zeros
+    const minAbsences = d3.min(data.filter(d => d.Absences_Normalized > 0), d => d.Absences_Normalized);
+    const maxAbsences = d3.max(data, d => d.Absences_Normalized);
+    const minRisk = d3.min(data.filter(d => d.Risk_Score > 0), d => d.Risk_Score);
+    const maxRisk = d3.max(data, d => d.Risk_Score);
+    const minWeekdayAlc = d3.min(data.filter(d => d.Dalc_Normalized > 0), d => d.Dalc_Normalized);
+    const maxWeekdayAlc = d3.max(data, d => d.Dalc_Normalized);
 
-    chart.append("g").call(d3.axisLeft(yScale));
-    chart.append("g").attr("transform", `translate(0, ${height})`).call(d3.axisBottom(xScale));
+    // Use log scales with adjusted domains to minimize whitespace
+    const xScale = d3.scaleLog()
+        .domain([minRisk * 0.9, maxRisk * 1.1]) // Swapped axes
+        .range([0, width])
+        .clamp(true);
+
+    const yScale = d3.scaleLog()
+        .domain([minAbsences * 0.9, maxAbsences * 1.1]) // Swapped axes
+        .range([height, 0])
+        .clamp(true);
+
+    // Create color gradient scale for normalized weekday alcohol consumption
+    const colorScale = d3.scaleSequential(d3.interpolateViridis)
+        .domain([minWeekdayAlc, maxWeekdayAlc]); // Adjusted domain for weekday alcohol consumption
+
+    // Add axes with custom ticks for better readability on log scale
+    const xAxis = d3.axisBottom(xScale)
+        .ticks(5)
+        .tickFormat(d3.format(".2f"));
+    
+    const yAxis = d3.axisLeft(yScale)
+        .ticks(5)
+        .tickFormat(d3.format(".2f"));
+
+    chart.append("g")
+        .attr("class", "x-axis")
+        .attr("transform", `translate(0, ${height})`)
+        .call(xAxis);
+
+    chart.append("g")
+        .attr("class", "y-axis")
+        .call(yAxis);
 
     // Add axis labels
+    chart.append("text")
+        .attr("x", width / 2)
+        .attr("y", height + 40)
+        .attr("text-anchor", "middle")
+        .attr("font-size", "14px")
+        .text("Risk Score (log scale)"); // Swapped labels
+
     chart.append("text")
         .attr("x", -height / 2)
         .attr("y", -50)
         .attr("transform", "rotate(-90)")
         .attr("text-anchor", "middle")
         .attr("font-size", "14px")
-        .text("Risk Score");
-
-    chart.append("text")
-        .attr("x", width / 2)
-        .attr("y", height + 40)
-        .attr("text-anchor", "middle")
-        .attr("font-size", "14px")
-        .text("Absences (Normalized)");
+        .text("Absences (log scale)"); // Swapped labels
 
     // Add a group for each score bucket to enable toggling
     const scoreGroups = d3.group(data, d => d.Performance);
@@ -192,50 +226,22 @@ function createScatterPlots(data) {
         .attr("class", "score-group")
         .attr("data-category", d => d[0]);
 
-    // Create a categorical color scale for Performance levels
-    const performanceColorScale = d3.scaleOrdinal()
-        .domain(['Low', 'Average', 'High'])
-        .range([colorScale(1), colorScale(3), colorScale(5)]); // Use different shades of blue
-
-    const legend = chart.append("g")
-        .attr("class", "legend")
-        .attr("transform", `translate(${width - 100}, 20)`);
-
-    // Add points for each group
+    // Add points for each group, handling zero values
     groupSelection.selectAll("circle")
         .data(d => d[1])
         .enter()
         .append("circle")
-        .attr("cx", d => xScale(d.Absences_Normalized))
-        .attr("cy", d => yScale(d.Risk_Score))
+        .attr("cx", d => xScale(Math.max(minRisk, d.Risk_Score))) // Swapped values
+        .attr("cy", d => yScale(Math.max(minAbsences, d.Absences_Normalized))) // Swapped values
         .attr("r", 6)
-        .attr("fill", d => performanceColorScale(d.Performance)) // Use Performance category for color
-        .attr("opacity", 0.8) // Increased opacity
+        .attr("fill", d => colorScale(d.Dalc_Normalized)) // Color by normalized weekday alcohol consumption
+        .attr("opacity", 0.8)
         .on("mouseover", function(e, d) {
-            // Capture the hovered point
             const selected = d3.select(this);
             selected.attr("stroke", "black").attr("stroke-width", 2).attr("r", 10);
 
             tooltip.style("opacity", 1)
-                .html(`<b>Performance</b>: ${d.Performance}<br>Risk: ${d.Risk_Score}<br>Absences: ${d.Absences_Normalized}`);
-
-            // Calculate distance and repel other points
-            groupSelection.selectAll("circle").each(function(other) {
-                const otherPoint = d3.select(this);
-                if (other !== d) {
-                    const dx = xScale(other.Absences_Normalized) - xScale(d.Absences_Normalized);
-                    const dy = yScale(other.Risk_Score) - yScale(d.Risk_Score);
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-
-                    if (dist < 50) {
-                        const angle = Math.atan2(dy, dx);
-                        otherPoint.transition()
-                            .duration(300)
-                            .attr("cx", xScale(other.Absences_Normalized) + Math.cos(angle) * 50)
-                            .attr("cy", yScale(other.Risk_Score) + Math.sin(angle) * 50);
-                    }
-                }
-            });
+                .html(`<b>Weekday Alc</b>: ${d.Dalc_Normalized.toFixed(3)}<br>Risk: ${d.Risk_Score.toFixed(3)}<br>Absences: ${d.Absences_Normalized.toFixed(3)}`);
         })
         .on("mousemove", e => {
             tooltip.style("left", (e.pageX + 10) + "px").style("top", (e.pageY - 20) + "px");
@@ -243,53 +249,60 @@ function createScatterPlots(data) {
         .on("mouseout", function(e, d) {
             const selected = d3.select(this);
             selected.attr("stroke", "none").attr("r", 6);
-
             tooltip.style("opacity", 0);
-
-            // Reset all points to their original positions
-            groupSelection.selectAll("circle").transition()
-                .duration(300)
-                .attr("cx", d => xScale(d.Absences_Normalized))
-                .attr("cy", d => yScale(d.Risk_Score));
         });
 
-    // Add checkboxes for toggling categories
-    const filterContainer = d3.select("#scatter-plots").append("div").attr("class", "filters");
-    filterContainer.selectAll("label")
-        .data(Array.from(scoreGroups.keys()))
-        .enter()
-        .append("label")
-        .html(d => `<input type="checkbox" checked data-category="${d}"> ${d}`)
-        .on("change", function() {
-            const checkbox = d3.select(this).select("input");
-            const category = checkbox.attr("data-category");
-            const visible = checkbox.property("checked");
+    // Add legend with continuous gradient
+    const legendWidth = 20;
+    const legendHeight = 200;
+    
+    const legend = svg.append("g") // Moved legend to the main SVG
+        .attr("class", "legend")
+        .attr("transform", `translate(${width + margin.right - 20}, 125)`); // Adjusted position to the far right
 
-            chart.selectAll(`g.score-group[data-category="${category}"]`)
-                .attr("display", visible ? "block" : "none");
-        });
+    // Create gradient definition
+    const gradient = svg.append("defs")
+        .append("linearGradient")
+        .attr("id", "colorGradient")
+        .attr("x1", "0%")
+        .attr("y1", "100%")
+        .attr("x2", "0%")
+        .attr("y2", "0%");
 
-    // Add colored rectangles
-    legend.selectAll("rect")
-        .data(['High', 'Average', 'Low'])
-        .enter()
-        .append("rect")
-        .attr("x", 0)
-        .attr("y", (d, i) => i * 20)
-        .attr("width", 12)
-        .attr("height", 12)
-        .attr("fill", d => performanceColorScale(d));
+    // Add gradient stops
+    const stops = d3.range(0, 21);
+    stops.forEach(stop => {
+        gradient.append("stop")
+            .attr("offset", `${(stop/20) * 100}%`)
+            .attr("stop-color", colorScale(stop));
+    });
 
-    // Add text labels
-    legend.selectAll("text")
-        .data(['High', 'Average', 'Low'])
-        .enter()
-        .append("text")
-        .attr("x", 20)
-        .attr("y", (d, i) => i * 20 + 10)
-        .text(d => d)
+    // Add gradient rectangle
+    legend.append("rect")
+        .attr("width", legendWidth)
+        .attr("height", legendHeight)
+        .style("fill", "url(#colorGradient)");
+
+    // Add legend axis
+    const legendScale = d3.scaleLinear()
+        .domain([minWeekdayAlc, maxWeekdayAlc])
+        .range([legendHeight, 0]);
+
+    const legendAxis = d3.axisRight(legendScale)
+        .ticks(5);
+
+    legend.append("g")
+        .attr("transform", `translate(${legendWidth}, 0)`)
+        .call(legendAxis);
+
+    // Add legend title
+    legend.append("text")
+        .attr("x", -legendHeight/2)
+        .attr("y", legendWidth + 40)
+        .attr("text-anchor", "middle")
+        .attr("transform", "rotate(-90)")
         .attr("font-size", "12px")
-        .attr("alignment-baseline", "middle");
+        .text("Normalized Weekday Alc"); // Updated legend title
 }
 
 
@@ -317,7 +330,6 @@ function createBarChart(dataset) {
                 left: 50,
             },
         }
-
 
         var svg = d3
             .select("#bar-chart")
@@ -390,13 +402,8 @@ function createBarChart(dataset) {
             .domain([0, d3.max(stackedData[stackedData.length - 1], (d) => d[1])])
             .range([dimensions.height - dimensions.margin.bottom, dimensions.margin.top])
 
-        // blue sequential color scale
-        const colorScale = d3.scaleSequential(d3.interpolateBlues)
-            .domain([0, 5]); // Adjust domain for bar chart
-
         // create axis
         var xAxis = d3.axisBottom(xScale)
-        //.tickFormat((d) => d)
         var yAxis = d3.axisLeft(yScale)
 
         // append axis
@@ -417,11 +424,11 @@ function createBarChart(dataset) {
            .text("Weekday Alcohol Consumption Frequency")
 
         // legend
-        svg.append("rect").attr("x", dimensions.width-65).attr("y", 70).attr("width", 12).attr("height", 12).style("fill", colorScale(keys[0])).attr("class", "legend")
-        svg.append("rect").attr("x", dimensions.width-65).attr("y", 90).attr("width", 12).attr("height", 12).style("fill", colorScale(keys[1])).attr("class", "legend")
-        svg.append("rect").attr("x", dimensions.width-65).attr("y", 110).attr("width", 12).attr("height", 12).style("fill", colorScale(keys[2])).attr("class", "legend")
-        svg.append("rect").attr("x", dimensions.width-65).attr("y", 130).attr("width", 12).attr("height", 12).style("fill", colorScale(keys[3])).attr("class", "legend")
-        svg.append("rect").attr("x", dimensions.width-65).attr("y", 150).attr("width", 12).attr("height", 12).style("fill", colorScale(keys[4])).attr("class", "legend")
+        svg.append("rect").attr("x", dimensions.width-65).attr("y", 70).attr("width", 12).attr("height", 12).style("fill", colorScale(1)).attr("class", "legend")
+        svg.append("rect").attr("x", dimensions.width-65).attr("y", 90).attr("width", 12).attr("height", 12).style("fill", colorScale(2)).attr("class", "legend")
+        svg.append("rect").attr("x", dimensions.width-65).attr("y", 110).attr("width", 12).attr("height", 12).style("fill", colorScale(3)).attr("class", "legend")
+        svg.append("rect").attr("x", dimensions.width-65).attr("y", 130).attr("width", 12).attr("height", 12).style("fill", colorScale(4)).attr("class", "legend")
+        svg.append("rect").attr("x", dimensions.width-65).attr("y", 150).attr("width", 12).attr("height", 12).style("fill", colorScale(5)).attr("class", "legend")
         svg.append("text").attr("x", dimensions.width-50).attr("y", 77).text("None").style("font-size", "10px").attr("alignment-baseline", "middle")
         svg.append("text").attr("x", dimensions.width-50).attr("y", 97).text("Low").style("font-size", "10px").attr("alignment-baseline", "middle")
         svg.append("text").attr("x", dimensions.width-50).attr("y", 117).text("Medium").style("font-size", "10px").attr("alignment-baseline", "middle")
@@ -429,14 +436,13 @@ function createBarChart(dataset) {
         svg.append("text").attr("x", dimensions.width-50).attr("y", 157).text("Significant").style("font-size", "10px").attr("alignment-baseline", "middle")
         svg.append("text").attr("x", (dimensions.width - dimensions.margin.right) / 2).attr("y", (dimensions.margin.top / 2)).attr("text-anchor", "middle").style("font-size", "12px").text("Weekday Alcohol Consumption on Final Exam Performance")
         
-
         // draw stacked bars
         function drawStacked() {
             svg.selectAll(".stacked-bar")
             .data(stackedData)
             .join("g")
             .attr("class", "stacked-bar")
-            .attr("fill", (d, i) => colorScale(2 + i * 0.75)) // Offset to use darker part of scale
+            .attr("fill", (d, i) => colorScale(i + 1)) // Use colorScale for stacked bars
             .selectAll("rect")
             .data((d) => d)
             .join("rect")
@@ -457,7 +463,6 @@ function createBarChart(dataset) {
         // draw grouped bars
         function drawGrouped() {
             const groupedBars = svg.selectAll(".grouped-bar")
-            //svg.selectAll(".grouped-bar")
                 .data(processedData)
                 .join("g")
                 .attr("class", "grouped-bar")
@@ -465,14 +470,13 @@ function createBarChart(dataset) {
         
             // add the bars for each Dalc level within the group
             const rects = groupedBars.selectAll("rect")
-            //svg.selectAll(".grouped-bars rect")
                 .data(d => d3.range(5).map(i => ({
                     G3: d.G3,
                     Dalc: i + 1,
                     count: d[i + 1],
                 })))
                 .join("rect")
-                .style("fill", d => colorScale(d.Dalc))
+                .style("fill", d => colorScale(d.Dalc)) // Use colorScale for grouped bars
                 .attr("x", (d, i) => i * (xScale.bandwidth() / 5))  // position each Dalc level within the group
                 .attr("y", dimensions.height - dimensions.margin.bottom)
                 .attr("width", 5)
@@ -494,12 +498,10 @@ function createBarChart(dataset) {
             .join("text")
             .attr("class", "total-label")
             .attr("x", d => xScale(d.G3) + xScale.bandwidth() / 2) // center
-            //.attr("y", d => yScale(d3.sum(keys, (key) => d[key])) - 5)
             .attr("y", function(d) { if (c === "stacked") { return yScale(d3.sum(keys, (key) => d[key])) - 5} else { return yScale(d3.max(keys, (key) => d[key])) - 5}})
             .attr("text-anchor", "middle")
             .style("font-size", "12px")
             .style("fill", "black")
-            //.text((d) => d3.sum(keys, (key) => d[key]))
             .text(function(d) { if (c === "stacked") { return d3.sum(keys, (key) => d[key])} else { return d3.max(keys, (key) => d[key])}})
         }
 
