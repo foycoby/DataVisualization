@@ -1,3 +1,7 @@
+// Define the global color scale at the top of your file
+const colorScale = d3.scaleSequential(d3.interpolateBlues)
+    .domain([0, 5]); // Adjusted domain to provide darker blues
+
 // Load the JSON file and initialize the dashboard
 
 /*
@@ -78,7 +82,7 @@ function create2dDensityChart(data) {
         .append("path")
         .attr("d", d3.geoPath())
         .attr("fill", "none")
-        .attr("stroke", "steelblue")
+        .attr("stroke", colorScale(5)) // Use color scale
         .attr("stroke-width", 1.5)
         .attr("opacity", 0.7);
 
@@ -97,7 +101,7 @@ function create2dDensityChart(data) {
             .attr("cx", d => xScale(d.G3))
             .attr("cy", d => yScale(d.Dalc_Normalized))
             .attr("r", 2)
-            .attr("fill", "red")
+            .attr("fill", d => colorScale(d.Dalc_Normalized * 2)) // Use color scale
             .attr("opacity", 0.8)
             .on("mouseover", function (e, d) {
                 const count = groupedData
@@ -135,7 +139,7 @@ function createPieChart(data) {
         .enter()
         .append("path")
         .attr("d", arc)
-        .attr("fill", d => color(d.data[0]))
+        .attr("fill", (d, i) => colorScale(i * 2)) // Use color scale
         .on("mouseover", function(e, d) {
             tooltip.style("opacity", 1).text(`${d.data[0]}: ${d.data[1]}`);
         })
@@ -158,9 +162,7 @@ function createScatterPlots(data) {
 
     const xScale = d3.scaleLinear().domain([0, 1]).range([0, width]);
     const yScale = d3.scaleLinear().domain([0, 1]).range([height, 0]);
-    const color = d3.scaleOrdinal()
-        .domain(["High", "Average", "Low"])
-        .range(["green", "blue", "red"]);
+    const color = d3.scaleOrdinal(d3.schemeCategory10);
 
     chart.append("g").call(d3.axisLeft(yScale));
     chart.append("g").attr("transform", `translate(0, ${height})`).call(d3.axisBottom(xScale));
@@ -190,6 +192,11 @@ function createScatterPlots(data) {
         .attr("class", "score-group")
         .attr("data-category", d => d[0]);
 
+    // Create a categorical color scale for Performance levels
+    const performanceColorScale = d3.scaleOrdinal()
+        .domain(['Low', 'Average', 'High'])
+        .range([colorScale(1), colorScale(3), colorScale(5)]); // Use different shades of blue
+
     // Add points for each group
     groupSelection.selectAll("circle")
         .data(d => d[1])
@@ -198,8 +205,8 @@ function createScatterPlots(data) {
         .attr("cx", d => xScale(d.Absences_Normalized))
         .attr("cy", d => yScale(d.Risk_Score))
         .attr("r", 6)
-        .attr("fill", d => color(d.Performance))
-        .attr("opacity", 0.7)
+        .attr("fill", d => performanceColorScale(d.Performance)) // Use Performance category for color
+        .attr("opacity", 0.8) // Increased opacity
         .on("mouseover", function(e, d) {
             // Capture the hovered point
             const selected = d3.select(this);
@@ -359,7 +366,7 @@ function createBarChart(dataset) {
 
         // blue sequential color scale
         const colorScale = d3.scaleSequential(d3.interpolateBlues)
-            .domain([-0.5 * 5, 1.5 * 5])
+            .domain([0, 5]); // Adjust domain for bar chart
 
         // create axis
         var xAxis = d3.axisBottom(xScale)
@@ -403,7 +410,7 @@ function createBarChart(dataset) {
             .data(stackedData)
             .join("g")
             .attr("class", "stacked-bar")
-            .attr("fill", (d, i) => colorScale(keys[i]))
+            .attr("fill", (d, i) => colorScale(2 + i * 0.75)) // Offset to use darker part of scale
             .selectAll("rect")
             .data((d) => d)
             .join("rect")
