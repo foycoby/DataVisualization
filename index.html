@@ -7,7 +7,7 @@
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
         .chart-container {
-            margin: 20px;
+            margin: 5px;
         }
         .tooltip {
             position: absolute;
@@ -18,14 +18,44 @@
             opacity: 0;
             pointer-events: none;
         }
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(2, 2fr);
+            gap: 10px;
+            padding: 10px;
+        }
+
+        .viz-container {
+            border: 1px solid #ccc;
+            padding: 10px;
+            height: 300px;
+        }
     </style>
 </head>
 <body>
-<div id="dashboard">
-    <div id="heatmap" class="chart-container"></div>
-    <div id="pie-chart" class="chart-container"></div>
-    <div id="scatter-plots" class="chart-container"></div>
-</div>
+    <div class="dashboard">
+        <!-- Bar Chart -->
+        <div class="chart-container">
+          <div id="bar-chart" class="chart"></div>
+            <button id="grouped">Grouped</button>
+            <button id="stacked">Stacked</button>
+        </div>
+    
+        <!-- Heatmap -->
+        <div class="chart-container">
+          <div id="heatmap" class="chart"></div>
+        </div>
+    
+        <!-- Pie Chart -->
+        <div class="chart-container">
+          <div id="pie-chart" class="chart"></div>
+        </div>
+    
+        <!-- Scatterplot -->
+        <div class="chart-container">
+          <div id="scatter-plots" class="chart"></div>
+        </div>
+      </div>
 <div class="tooltip" id="tooltip"></div>
 <script src="dashboard.js"></script>
 </body>
