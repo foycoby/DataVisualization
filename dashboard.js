@@ -27,7 +27,7 @@ Promise.all([
 // Tooltip initialization
 const tooltip = d3.select("#tooltip");
 
-// Stacked Bar Chart
+// Heatmap
 function create2dDensityChart(data) {
     const svg = d3.select("#heatmap").append("svg")
         .attr("width", 800)
@@ -231,6 +231,8 @@ function createScatterPlots(data) {
         .data(d => d[1])
         .enter()
         .append("circle")
+        .attr("class", d => d.G3.toString()) // ?? Coby added line to discern G3 for each circle for interactive purposes. Might work??
+        // ----------------------------------------------------------------------------------------------------------------------------
         .attr("cx", d => xScale(Math.max(minRisk, d.Risk_Score))) // Swapped values
         .attr("cy", d => yScale(Math.max(minAbsences, d.Absences_Normalized))) // Swapped values
         .attr("r", 6)
@@ -360,6 +362,8 @@ function createBarChart(dataset) {
             },
         }
 
+        var current = "stacked"
+
         var svg = d3
             .select("#bar-chart")
             .append("svg")
@@ -467,19 +471,19 @@ function createBarChart(dataset) {
         
         // draw stacked bars
         function drawStacked() {
-            svg.selectAll(".stacked-bar")
+            const stackedBars = svg.selectAll(".stacked-bar")
             .data(stackedData)
             .join("g")
             .attr("class", "stacked-bar")
             .attr("fill", (d, i) => colorScale(i + 1)) // Use colorScale for stacked bars
-            .selectAll("rect")
+            const rects = stackedBars.selectAll("rect")
             .data((d) => d)
             .join("rect")
             .attr("x", d => xScale(d.data.G3))
             .attr("y", dimensions.height - dimensions.margin.bottom)
             .attr("width", 5)
             .attr("height", 0)
-                    .transition()
+            rects.transition()
                     .duration(1000)
                     .ease(d3.easeSinInOut)
                     .attr("y", d => yScale(d[1]))
@@ -510,7 +514,7 @@ function createBarChart(dataset) {
                 .attr("y", dimensions.height - dimensions.margin.bottom)
                 .attr("width", 5)
                 .attr("height", 0)
-                    .transition()
+            rects.transition()
                     .duration(1000)
                     .ease(d3.easeSinInOut)
                     .attr("y", d => yScale(d.count))
@@ -518,6 +522,57 @@ function createBarChart(dataset) {
                     .transition()
                     .duration(500)
                 .attr("width", xScale.bandwidth() / 5)
+
+            // add interactive element by clicking on bar chart
+            rects.on("click", function (event, d) {
+
+                    const selectedDalc = d.Dalc
+                    const selectedG3 = d.G3
+                    const bar = d3.select(this)
+            
+                    // bar is already highlighted, remove highlight and reset scatterplot
+                    if (bar.classed("highlight")) {
+                        bar.classed("highlight", false)
+                            .attr("fill", "steelblue")
+                            .attr("stroke", "none")
+                        d3.selectAll("circle").each(function(e) {
+                            const dot = d3.select(this)
+                                dot.transition().duration(300).attr("opacity", 1)
+                        })
+                    }
+                    // bar is not already highlighted, remove previous highlight and reset scatterplot
+                    else {
+                        svg.selectAll(".bar")
+                            .classed("highlight", false)
+                            .attr("fill", "steelblue")
+                            .attr("stroke", "none")
+                        d3.selectAll("circle").each(function(e) {
+                            const dot = d3.select(this)
+                                dot.transition().duration(300).attr("opacity", 1)
+                        })
+            
+                        // highlight bar and reduce opacity for all scatterplot dots with differing data to see trends
+                        bar.classed("highlight", true)
+                            .attr("fill", "red")
+                            .attr("stroke", "red")
+                            .attr("stroke-width", 2)
+                        /*
+                        d3.selectAll("circle").each(function(e) {
+                            const dot = d3.select(this)
+                                dot.transition().duration(300).attr("opacity", 0.05)
+                        })
+                        */
+                       // Only highlight dots that match both Dalc and exam score
+                       d3.selectAll("circle").each(function(e) {
+                        const dot = d3.select(this)
+                        if (e.Dalc_Normalized === selectedDalc / 5 && dot.classed(selectedG3.toString())) {
+                            dot.transition().duration(300).attr("opacity", 1) // keep dots of correct class and value highlighted
+                        } else {
+                            dot.transition().duration(300).attr("opacity", 0.1) // grey out other dots
+                        }
+                    })
+                }
+                })
         }
 
         // add totals for each stack
@@ -536,7 +591,10 @@ function createBarChart(dataset) {
 
         // reference lines at each y-axis tick
         function addTicks() {
-            for (var i = 5; i < d3.max(stackedData[stackedData.length - 1], d => d[1]); i+=5) {
+            var j = 0
+            if (current == "grouped") j = 10
+            else j = 20
+            for (var i = 5; i < d3.max(stackedData[stackedData.length - 1], d => d[1]); i+=j) {
                 svg.append("line")
                     .attr("class", "line-label")
                     .attr("x1", dimensions.margin.left)
@@ -557,6 +615,8 @@ function createBarChart(dataset) {
         function transitionGrouped() {
             // update y-scale
             yScale.domain([0, d3.max(processedData.flatMap(d => keys.map(k => d[k])))])
+
+            current = "grouped"
         
             // animate preexisting stacked bars
             svg.selectAll(".stacked-bar rect")
@@ -590,6 +650,8 @@ function createBarChart(dataset) {
         // ON CLICK FUNCTION
         function transitionStacked() {
             yScale.domain([0, d3.max(stackedData[stackedData.length - 1], d => d[1])])
+
+            current = "stacked"
 
             // animate preexisting grouped bars
             svg.selectAll(".grouped-bar rect")
