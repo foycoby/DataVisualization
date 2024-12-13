@@ -27,98 +27,196 @@ Promise.all([
 // Tooltip initialization
 const tooltip = d3.select("#tooltip");
 
-// Heatmap
+// heat map
 function create2dDensityChart(data) {
     const svg = d3.select("#heatmap").append("svg")
         .attr("width", 800)
-        .attr("height", 400);
+        .attr("height", 450);
 
-    const margin = { top: 40, right: 40, bottom: 40, left: 60 };
+    const margin = { top: 60, right: 50, bottom: 60, left: 80 };
     const width = svg.attr("width") - margin.left - margin.right;
     const height = svg.attr("height") - margin.top - margin.bottom;
 
     const chart = svg.append("g")
         .attr("transform", `translate(${margin.left}, ${margin.top})`);
 
+    // Compute data ranges with some padding
+    const xExtent = d3.extent(data, d => d.G3);
+    const yExtent = d3.extent(data, d => d.Dalc_Normalized);
+
     // Scales
     const xScale = d3.scaleLinear()
-        .domain(d3.extent(data, d => d.G3))
+        .domain([xExtent[0] - 1, xExtent[1] + 1])
         .range([0, width]);
 
     const yScale = d3.scaleLinear()
-        .domain([0, Math.max(0.1, d3.max(data, d => d.Dalc_Normalized))]) // Include 0 and 0.1 in domain
+        .domain([yExtent[0] - 0.1, yExtent[1] + 0.1])
         .range([height, 0]);
 
+    // Create a hexbin generator
+    const hexbin = d3.hexbin()
+        .x(d => xScale(d.G3))
+        .y(d => yScale(d.Dalc_Normalized))
+        .radius(20)
+        .extent([[0, 0], [width, height]]);
+
+    // Generate grid of points covering the entire domain
+    const xGrid = d3.range(xExtent[0] - 1, xExtent[1] + 1, 0.5);
+    const yGrid = d3.range(yExtent[0] - 0.1, yExtent[1] + 0.1, 0.1);
+    const gridPoints = [];
+    
+    xGrid.forEach(x => {
+        yGrid.forEach(y => {
+            gridPoints.push({
+                G3: x,
+                Dalc_Normalized: y
+            });
+        });
+    });
+
+    // Combine actual data points with grid points
+    const combinedData = [...data, ...gridPoints];
+
+    // Compute the hexbin data
+    const hexbinData = hexbin(combinedData);
+
+    // Count only actual data points for color scale
+    hexbinData.forEach(hex => {
+        hex.actualCount = hex.filter(d => data.includes(d)).length;
+    });
+
+    // Color scale based on count of actual data points
+    const maxCount = d3.max(hexbinData, d => d.actualCount);
+    const colorScale = d3.scaleSequential(d3.interpolateViridis)
+        .domain([0, maxCount]);
+
+    // Draw hexbins
+    chart.selectAll(".hexbin")
+        .data(hexbinData)
+        .enter()
+        .append("path")
+        .attr("class", "hexbin")
+        .attr("d", d => hexbin.hexagon())
+        .attr("transform", d => `translate(${d.x},${d.y})`)
+        .attr("fill", d => colorScale(d.actualCount))
+        .attr("opacity", d => d.actualCount > 0 ? 0.75 : 0.8)  // Lower opacity for empty hexbins
+        .on("mouseover", function(event, d) {
+            d3.select(this)
+                .attr("stroke", "black")
+                .attr("stroke-width", 2);
+            
+            const actualPoints = d.filter(p => data.includes(p));
+            const tooltipContent = actualPoints.length > 0 
+                ? `Frequency: ${actualPoints.length}<br>` +
+                  `Avg G3: ${d3.mean(actualPoints, p => p.G3).toFixed(2)}<br>` +
+                  `Avg Dalc: ${d3.mean(actualPoints, p => p.Dalc_Normalized).toFixed(2)}`
+                : "No data points in this area";
+                
+            d3.select("#tooltip")
+                .style("opacity", 1)
+                .html(tooltipContent)
+                .style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 10) + "px");
+        })
+        .on("mouseout", function() {
+            d3.select(this).attr("stroke", "none");
+            d3.select("#tooltip").style("opacity", 0);
+        });
+
     // Axes
+    const xAxis = d3.axisBottom(xScale)
+        .tickSize(15)
+        .ticks(10)
+        .tickFormat(d3.format(".0f"));
+
+    const yAxis = d3.axisLeft(yScale)
+        .ticks(8)
+        .tickFormat(d3.format(".2f"));
+
+    // X-axis
     chart.append("g")
-        .attr("transform", `translate(0, ${height})`)
-        .call(d3.axisBottom(xScale).ticks(10))
+        .attr("transform", `translate(0, ${height + 10})`)
+        .call(xAxis)
         .append("text")
         .attr("x", width / 2)
         .attr("y", 40)
         .attr("fill", "black")
-        .text("G3");
+        .attr("text-anchor", "middle")
+        .text("Final Grade (G3)");
 
+    // Y-axis
     chart.append("g")
-        .call(d3.axisLeft(yScale)
-            .tickValues([0, 0.1, ...yScale.ticks(10)])) // Add 0 and 0.1 explicitly
+        .attr("transform", "translate(-15, 0)") // Shift Y-axis ticks to the left
+        .call(yAxis)
         .append("text")
         .attr("transform", "rotate(-90)")
         .attr("x", -height / 2)
-        .attr("y", -40)
+        .attr("y", -50)
         .attr("fill", "black")
-        .text("Dalc");  
+        .attr("text-anchor", "middle")
+        .text("Normalized Weekday Alcohol Consumption");
 
-    // Contour Density
-    const contours = d3.contourDensity()
-        .x(d => xScale(d.G3))
-        .y(d => yScale(d.Dalc_Normalized))
-        .size([width, height])
-        .bandwidth(13)(data);
+    // Chart title
+    svg.append("text")
+        .attr("x", svg.attr("width") / 2)
+        .attr("y", margin.top / 2)
+        .attr("text-anchor", "middle")
+        .style("font-size", "16px")
+        .style("font-weight", "bold")
+        .text("Relationship between Final Grade and Alcohol Consumption");
 
-    chart.selectAll("path")
-        .data(contours)
-        .enter()
-        .append("path")
-        .attr("d", d3.geoPath())
-        .attr("fill", "none")
-        .attr("stroke", colorScale(2)) // Use color scale
-        .attr("stroke-width", 1.5)
-        .attr("opacity", 0.7);
-
-        const groupedData = d3.rollup(
-            data,
-            v => v.length,
-            d => d.Dalc_Normalized.toFixed(2),
-            d => d.G3.toFixed(2)
-        );
+    // Color scale legend
+    const legendWidth = 20;
+    const legendHeight = 200;
     
-        // Scatter Plot
-        chart.selectAll("circle")
-            .data(data)
-            .enter()
-            .append("circle")
-            .attr("cx", d => xScale(d.G3))
-            .attr("cy", d => yScale(d.Dalc_Normalized))
-            .attr("r", 2)
-            .attr("fill", d => colorScale(0.5 + d.Dalc_Normalized/2)) // Using blues with varying intensity
-            .attr("opacity", 0.8)
-            .on("mouseover", function (e, d) {
-                const count = groupedData
-                    .get(d.Dalc_Normalized.toFixed(2))
-                    ?.get(d.G3.toFixed(2));
-    
-                d3.select("#tooltip")
-                    .style("opacity", 1)
-                    .text(`Count: ${count}`);
-            })
-            .on("mousemove", e => {
-                d3.select("#tooltip")
-                    .style("left", (e.pageX + 5) + "px")
-                    .style("top", (e.pageY - 28) + "px");
-            })
-            .on("mouseout", () => d3.select("#tooltip").style("opacity", 0));
+    const legend = svg.append("g")
+        .attr("transform", `translate(${svg.attr("width") - margin.right}, ${margin.top})`);
+
+    // Create gradient
+    const gradient = svg.append("defs")
+        .append("linearGradient")
+        .attr("id", "heatmapGradient")
+        .attr("x1", "0%")
+        .attr("y1", "100%")
+        .attr("x2", "0%")
+        .attr("y2", "0%");
+
+    // Create gradient stops
+    const colorStops = 20;
+    for (let i = 0; i <= colorStops; i++) {
+        gradient.append("stop")
+            .attr("offset", `${(i/colorStops) * 100}%`)
+            .attr("stop-color", colorScale(i * (maxCount / colorStops)));
+    }
+
+    // Gradient rectangle
+    legend.append("rect")
+        .attr("width", legendWidth)
+        .attr("height", legendHeight)
+        .style("fill", "url(#heatmapGradient)");
+
+    // Legend axis
+    const legendScale = d3.scaleLinear()
+        .domain([0, maxCount])
+        .range([legendHeight, 0]);
+
+    const legendAxis = d3.axisRight(legendScale)
+        .ticks(5);
+
+    legend.append("g")
+        .attr("transform", `translate(${legendWidth}, 0)`)
+        .call(legendAxis);
+
+    // Legend title
+    legend.append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("x", -legendHeight/2)
+        .attr("y", legendWidth + 40)
+        .attr("text-anchor", "middle")
+        .style("font-size", "12px")
+        .text("Frequency");
 }
+
 // Pie Chart
 function createPieChart(data) {
     const svg = d3.select("#pie-chart").append("svg")
